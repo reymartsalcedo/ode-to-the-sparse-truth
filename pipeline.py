@@ -276,11 +276,13 @@ def htp(model, k):
     return frozenset(prev)
 
 
-def evidence(C, sigma):
-    """One Levenberg-Marquardt refit of the nonzero entries c of C (physical units) through the ODE from x0, and the
-    Laplace log evidence -|r|^2/2 sigma^2 - |c|^2/2 tau^2 - k log tau - 1/2 log det(J'J/sigma^2 + I/tau^2).
+def evidence(C, sigma, S=None):
+    """One Levenberg-Marquardt refit of the coefficients c of support S (default: the nonzero entries of C; physical
+    units) through the ODE from x0, and the Laplace log evidence
+    -|r|^2/2 sigma^2 - |c|^2/2 tau^2 - k log tau - 1/2 log det(J'J/sigma^2 + I/tau^2).
     Returns (log Z, rms misfit, refitted C), or None if the solution blows up or fails."""
-    rows, cols = np.nonzero(C)
+    m = sorted(S) if S is not None else None              # the support's mechanisms, in np.nonzero's order
+    rows, cols = np.nonzero(C) if m is None else (np.array([q // 2 for q in m]), np.array([q % 2 for q in m]))
     p, E = rows.size, np.array(EXPS, dtype=np.float64)
     memo = {}
 
@@ -339,18 +341,19 @@ def _alarm(*_):
     raise _Timeout
 
 
-def map_refit(C, sigma, gate=-1e4, timeout=0):
-    """The MAP: the refit is repeated from its own result while log Z rises (at most 5 fits; only above `gate`).
-    After `timeout` seconds (0: none), or an error, the best refit so far is returned."""
+def map_refit(C, sigma, gate=-1e4, timeout=0, S=None):
+    """The MAP of support S (default: the nonzero entries of C): the refit is repeated from its own result while log Z
+    rises (at most 5 fits; only above `gate`). After `timeout` seconds (0: none), or an error, the best refit so far
+    is returned."""
     best, n = None, 1
     timeout = timeout if hasattr(signal, "SIGALRM") else 0     # no timeout where there is no SIGALRM
     if timeout:
         signal.signal(signal.SIGALRM, _alarm)
         signal.alarm(timeout)
     try:
-        best = evidence(C, sigma)
+        best = evidence(C, sigma, S)
         while best is not None and best[0] > gate and n < 5:
-            nxt = evidence(best[2], sigma)
+            nxt = evidence(best[2], sigma, S)
             n += 1
             if nxt is None or nxt[0] <= best[0] + 1e-3:
                 if nxt is not None and nxt[0] > best[0]:
@@ -378,7 +381,10 @@ def score(job):
     """(support, (log Z, rms misfit)) of one support: least squares on START, then the MAP refit through the ODE,
     at most `timeout` seconds; -inf if it fails."""
     S, sigma, timeout = job
-    out = map_refit(lsq(S, *START).reshape(10, 2) * F, sigma, timeout=timeout)
+    try:
+        out = map_refit(lsq(S, *START).reshape(10, 2) * F, sigma, timeout=timeout, S=S)
+    except _Timeout:                                  # the alarm fired as the refit ended, before it was cancelled
+        out = None
     return S, (out[0], out[1]) if out else (-math.inf, math.inf)
 
 
@@ -476,7 +482,7 @@ def main():
             fit = n * d ** 2 / (2 * a.sigma ** 2)
             line = f"  {i:2d}. {label(S)}  log Z {z:9.2f} = -fit {fit:6.2f} - prior and Occam {-z - fit:6.2f}  misfit {d:.1e}"
             if i <= 4:                                # the deviation from the true solution on [0, 20]
-                C = map_refit(lsq(S, A, b).reshape(10, 2) * F, a.sigma)[2]
+                C = map_refit(lsq(S, A, b).reshape(10, 2) * F, a.sigma, S=S)[2]
                 x = solve_ivp(lambda t, y: np.prod(np.asarray(y)[None, :] ** np.array(EXPS), axis=1) @ C, (T0, T1), X0,
                               t_eval=np.linspace(T0, T1, 2001), **SIM_SOLVER).y
                 line += f"  |dx|_inf {np.abs(x - x_true).max() if x.shape == x_true.shape else np.inf:.1e}"
@@ -515,8 +521,11 @@ def main():
         print("  the climbs' ends:\n" + "\n".join(f"    k = {k:2d}: {label(E)}, log Z {scores[E][0]:.2f}" for k, E in ends.items()))
     print(f"  (4) selected: {label(S)}, log Z {scores[S][0]:.2f}" + ("" if a.k else f" (k = {len(S)})"))
     model.load_state_dict(nets[len(S)])               # (5) the MAP from the current and the Stage 1 networks' start
-    fits = [map_refit(lsq(S, *start).reshape(10, 2) * F, a.sigma, -math.inf) for start in (blocks(model), START)]
-    z, d, C = max((f for f in fits if f), key=lambda f: f[0])
+    fits = [f for f in (map_refit(lsq(S, *start).reshape(10, 2) * F, a.sigma, -math.inf, S=S)
+                        for start in (blocks(model), START)) if f]
+    if not fits:
+        raise SystemExit(f"the ODE refit of the selected support failed from both starts: {sorted(S)}")
+    z, d, C = max(fits, key=lambda f: f[0])
     print(f"  (5) ODE refit: log Z {z:.2f}, misfit {d:.1e}")
 
     mask = np.zeros(20)

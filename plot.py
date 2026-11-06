@@ -36,7 +36,7 @@ def scores(path):
 
 def solution(S, sigma, start, t):
     """x(t; c) of support S: c from least squares on `start`, then the MAP refit through the ODE (as the climb scores)"""
-    C = p.map_refit(p.lsq(sorted(S), *start).reshape(10, 2) * p.F, sigma)[2]
+    C = p.map_refit(p.lsq(sorted(S), *start).reshape(10, 2) * p.F, sigma, S=S)[2]
     f = lambda _, y: np.prod(np.asarray(y)[None, :] ** np.array(p.EXPS), axis=1) @ C
     return p.solve_ivp(f, (p.T0, p.T1), p.X0, t_eval=t, **p.SIM_SOLVER).y.T
 
