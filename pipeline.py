@@ -514,7 +514,7 @@ def main():
         model.load_state_dict(after_sbl)
         S = htp(model, k)
         nets[k] = state(model)
-        print(f"  k = {k}: (2) l0-IHT-HTP: {label(S)}; (3) the climb:", flush=True)
+        print(f"  k = {k}: \n(2) l0-IHT-HTP: {label(S)}; \n(3) the climb:", flush=True)
         ends[k] = climb(S, scores, add)
     S = max(ends.values(), key=lambda q: scores[q][0])
     if not a.k:
