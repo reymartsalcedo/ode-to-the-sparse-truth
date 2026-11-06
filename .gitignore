@@ -1,0 +1,5 @@
+results/*
+!results/stage1.pt
+__pycache__/
+.venv/
+!results/baselines_reference.csv

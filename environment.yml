@@ -1,0 +1,12 @@
+# conda env create -f environment.yml && conda activate sparse-truth      (everything from conda-forge; no pip)
+name: sparse-truth
+channels:
+  - conda-forge
+dependencies:
+  - python>=3.11
+  - numpy>=2.0          # pysindy 2.1.0 needs numpy 2
+  - scipy>=1.11
+  - pytorch>=2.1        # the CPU build is enough
+  - matplotlib>=3.8     # plot.py only
+  - pysindy=2.1.0       # baselines.py only
+  - numpyro             # baselines.py only (sparse Bayesian regression; brings jax)
