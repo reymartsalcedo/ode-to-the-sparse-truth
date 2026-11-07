@@ -15,7 +15,8 @@ is observed (noise-free) at 100 evenly spaced times on [10, 20]; x0 is known. Li
 
     python pipeline.py --sigma 2e-7 --k 7 --workers 8                 # k known
     python pipeline.py --sigma 2e-7 --workers 8                       # k unknown: k = 19, ..., 2
-    python pipeline.py --sigma 2e-7 --k 7 --exhaustive --workers 63   # every support of size 7
+    python pipeline.py --sigma 2e-7 --k 7 --exhaustive --workers 63   # every support of size 7 (--progress N: a line
+                                                                      # every N supports, default 100)
     python pipeline.py --sigma 2e-7 --k 7 --exhaustive --exact-start  # the same, refits started from exact derivatives
 
 Stage 1 is loaded from results/stage1.pt, which ships with the paper's Stage 1 networks (HPC job 12514); without
@@ -388,6 +389,11 @@ def score(job):
     return S, (out[0], out[1]) if out else (-math.inf, math.inf)
 
 
+def duration(seconds):
+    """A duration in s, min or h."""
+    return f"{seconds:.0f} s" if seconds < 120 else f"{seconds / 60:.0f} min" if seconds < 7200 else f"{seconds / 3600:.1f} h"
+
+
 def label(S):
     """a/b: the true and the spurious mechanisms of S."""
     return f"{len(S & TRUTH)}/{len(S - TRUTH)}"
@@ -427,6 +433,7 @@ def main():
     ap.add_argument("--exhaustive", action="store_true", help="score every support of size k and stop")
     ap.add_argument("--exact-start", action="store_true", help="with --exhaustive: start refits from exact derivatives")
     ap.add_argument("--workers", type=int, default=1, help="processes scoring supports")
+    ap.add_argument("--progress", type=int, default=100, help="with --exhaustive: a progress line every N supports")
     a = ap.parse_args()
     if (a.exhaustive or a.exact_start) and not a.k or a.exact_start and not a.exhaustive:
         ap.error("--exhaustive needs --k, and --exact-start needs --exhaustive")
@@ -461,18 +468,27 @@ def main():
     pool = mp.Pool(a.workers, initializer=_set_start, initargs=((A, b),)) if a.workers > 1 else None
     _set_start((A, b))
 
-    def add(supports):                                # score the supports not yet in `scores`, appending to `path`
+    def add(supports, progress=False):                # score the supports not yet in `scores`, appending to `path`
         new = [(tuple(sorted(S)), a.sigma, TIMEOUT[mode]) for S in supports if S not in scores]
+        if progress:
+            print(f"  {len(supports) - len(new):,} of {len(supports):,} supports already scored in {path}; "
+                  f"scoring {len(new):,}", flush=True)
+        t0, step = time.time(), max(1, a.progress)
         with open(path, "a") as fh:
-            for S, v in (pool.imap_unordered(score, new, chunksize=8) if pool else map(score, new)):
+            for i, (S, v) in enumerate(pool.imap_unordered(score, new, chunksize=8) if pool else map(score, new), 1):
                 scores[frozenset(S)] = v
                 fh.write(f"{v[0]:.6f},{v[1]:.6e},{';'.join(MECH[m] for m in S)}\n")
+                if progress and (i % step == 0 or i == len(new)):
+                    fh.flush()
+                    el = time.time() - t0
+                    print(f"  {i:,} of {len(new):,} scored ({100 * i / len(new):.1f}%), {duration(el)}, "
+                          f"about {duration(el * (len(new) - i) / i)} left", flush=True)
 
     if a.exhaustive:
         every = [frozenset(S) for S in itertools.combinations(range(20), a.k)
                  if any(m % 2 == 0 for m in S) and any(m % 2 == 1 for m in S)]
         t0 = time.time()
-        add(every)
+        add(every, progress=True)
         rank = sorted(every, key=lambda S: -scores[S][0])
         print(f"\nExhaustive search, k = {a.k}, sigma = {a.sigma:g}: {len(every):,} supports ({time.time() - t0:.0f} s)")
         n = Y.size
