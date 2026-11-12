@@ -1,0 +1,7 @@
+# pip install -r requirements.txt      (the same packages as environment.yml, from PyPI)
+numpy>=2.0
+scipy>=1.11
+torch>=2.1          # for the CPU build only: pip install torch --index-url https://download.pytorch.org/whl/cpu
+matplotlib>=3.8     # plot.py only
+pysindy==2.1.0      # baselines.py only
+numpyro             # baselines.py only (sparse Bayesian regression; brings jax)
