@@ -7,8 +7,8 @@ This repository reproduces the results and the figure of the paper entitled
 The paper recovers the mechanisms of a bistable host–pathogen model from noise-free data on its nearly settled window [10, 20], with the initial state known.
 
 ```
-du/dt = -u^3 + 1.1 u^2 - 0.2 u - 0.2 u v,   u(0) = 1
-dv/dt =  0.5 u - v + 0.5 u v,               v(0) = 0.5
+du/dt = -1.0 u^3 + 1.1 u^2 - 0.2 u - 0.2 u v,   u(0) = 1.0
+dv/dt =  0.5 u - 1.0 v + 0.5 u v,               v(0) = 0.5
 ```
 
 | file | what it does |
@@ -154,7 +154,15 @@ Stage 1 loaded from results/stage1.pt (PINN loss 3.504868e-06)
 python pipeline.py --sigma 2e-7 --k 7 --exhaustive --workers 63
 ```
 
-It prints the ten best supports. For the four best it also gives the misfit δ and the largest deviation from the
+While it runs it prints its progress every 100 supports (`--progress 500`, `--progress 1000`, …: every N), for example
+
+```
+  0 of 77,280 supports already scored in results/scores_sigma2e-07_stage1_exhaustive.csv; scoring 77,280
+  100 of 77,280 scored (0.1%), 19 s, about 4.1 h left
+  200 of 77,280 scored (0.3%), 37 s, about 4.0 h left
+```
+
+(a resumed run first counts the supports already scored). At the end it prints the ten best supports. For the four best it also gives the misfit δ and the largest deviation from the
 true solution on [0, 20], ‖Δx‖∞ (Table 1 of the paper):
 
 ```
@@ -274,6 +282,7 @@ every setting (418) saved to results/baselines.csv
 sbatch hpc.sbatch                              # every step
 STEPS="1 2 3" sbatch hpc.sbatch                # only these steps
 PYTHON=/path/to/python3 sbatch hpc.sbatch      # another Python (default: python3 on the PATH)
+PROGRESS=500 sbatch hpc.sbatch                 # exhaustive searches: a progress line every 500 supports (default 100)
 ```
 
 The job runs the cluster's `python3`, which needs numpy, scipy, torch and matplotlib; it stops at once if one is missing. Step 9 also needs PySINDy (and numpyro); without them only step 9 fails. Without conda, install the packages for that `python3` once with `python3 -m pip install --user -r requirements.txt`. With conda, activate the environment of "Install" before submitting (`conda activate sparse-truth`): sbatch passes it on to the job.
@@ -310,11 +319,9 @@ On 63 workers the steps take about:
 
 `baselines.py` reproduces the development baselines bit for bit on the same machine: all 418 coefficient sets, except the three densest weak-SINDy fits (raw columns, threshold 1e-6), which differ by at most 1.3e-3 with the same terms kept.
 
-The paper's numbers come from one Stage 1 training, HPC job 12514 on node bead70 of the RUC-HPC cluster. Its networks are `results/stage1.pt`. From them, `pipeline.py` reproduced the paper's route and numbers exactly on another machine. ℓ0-IHT-HTP still trains the networks for 4,000 Adam epochs, which another machine could round differently; on the machine tested it did not.
+The paper's numbers come from one Stage 1 training, HPC job 12514 on node bead70 of the RUC-HPC cluster. Its networks are `results/stage1.pt`. From them, `pipeline.py` reproduced the paper's route and numbers exactly on another machine. ℓ0-IHT-HTP still trains the networks for 4,000 Adam epochs, which another machine could round differently.
 
 A fresh Stage 1 training gives the same networks only on the same kind of machine. The cluster's other node type gave other networks three times out of three, with the same data, starting weights and software. Its arithmetic differs: the CPU's instruction set selects the low-level kernels, and the number of CPU threads torch uses (`OMP_NUM_THREADS`) changes the order of its sums. Another machine's ODE solver can also change the last digit of some observations.
 
 Other Stage 1 networks give another ℓ0-IHT-HTP support. The climb then starts elsewhere and may stop on a local maximum. The exhaustive search does not depend on the start: the true model was first on every machine tried. The last digits of the coefficients can differ between machines; the paper's run gives 1.1000023652 for
 u².
-
-**One step differs from the development code.** That code also retrains the networks for 1,000 epochs (learning rate 1e-3, coefficients fixed) right after the ODE refit, before Stage 3. The paper does not describe this step, so this script leaves it out. The selected model and its coefficients are unchanged; Stage 3's PINN loss is higher, 4.1e-6 against 1.9e-6 with the step, from the paper's Stage 1 networks.
