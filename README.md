@@ -4,6 +4,8 @@ This repository reproduces the results and the figure of the paper entitled
 
 ```Trajectory-Based Bayesian Discovery of a Host-Pathogen Model from Quasi-Steady-State Observations by Reymart Salcedo Lagunero, Andreas Langer, Cordula Reisch```
 
+**arXiv link:** [https://doi.org/10.48550/arXiv.2611.18815](https://doi.org/10.48550/arXiv.2611.18815)
+
 The paper recovers the mechanisms of a bistable host–pathogen model from noise-free data on its nearly settled window [10, 20], with the initial state known.
 
 ```
