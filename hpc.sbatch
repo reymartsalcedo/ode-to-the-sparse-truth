@@ -1,9 +1,10 @@
 #!/bin/bash
-# Every result of the 8-page paper on one cluster node, step by step (README.md, "On a cluster").
+# Every result of the paper on one cluster node, step by step (README.md, "On a cluster").
 #
 #   sbatch hpc.sbatch                       # every step, 1 to 9
 #   STEPS="1 2 3" sbatch hpc.sbatch         # only these
 #   PYTHON=/path/to/python3 sbatch hpc.sbatch   # another Python (default: python3 on the PATH)
+#   PROGRESS=500 sbatch hpc.sbatch          # the exhaustive searches print a line every 500 supports (default 100)
 #
 # Everything is printed to sparse_truth_<job>.out as it happens, and each step also to results/step<n>.log.
 # A step that was interrupted resumes when the job is submitted again: every scored support is reread. Stage 1 is
@@ -31,6 +32,7 @@ PY=${PYTHON:-python3}                      # any Python with numpy, scipy, torch
 "$PY" -c "import numpy, scipy, torch, matplotlib" || { echo "$PY lacks numpy, scipy, torch or matplotlib: set PYTHON="; exit 1; }
 export PYTHONUNBUFFERED=1
 STEPS=${STEPS:-"1 2 3 4 5 6 7 8 9"}
+PROGRESS=${PROGRESS:-100}
 W=$(( ${SLURM_CPUS_PER_TASK:-8} - 1 ))
 mkdir -p results
 "$PY" -c "import platform, numpy, scipy, torch; print(f'python {platform.python_version()}, numpy {numpy.__version__}, \
@@ -47,12 +49,12 @@ for n in $STEPS; do
   case $n in
     1) step 1 "$PY" pipeline.py --sigma 2e-7 --k 7 --workers "$W"
        echo "   Stage 1 of the paper's run (HPC job 12514): PINN loss 3.504868e-06; this run: $(grep -m1 -o 'PINN loss [0-9.e+-]*' results/step1.log)" ;;
-    2) step 2 "$PY" pipeline.py --sigma 2e-7 --k 7 --exhaustive --workers "$W" ;;
+    2) step 2 "$PY" pipeline.py --sigma 2e-7 --k 7 --exhaustive --workers "$W" --progress "$PROGRESS" ;;
     3) step 3 "$PY" plot.py ;;
     4) step 4 "$PY" pipeline.py --sigma 2e-7 --workers "$W" ;;
-    5) step 5 "$PY" pipeline.py --sigma 2e-7 --k 7 --exhaustive --exact-start --workers "$W" ;;
-    6) step 6 "$PY" pipeline.py --sigma 1e-5 --k 7 --exhaustive --workers "$W" ;;
-    7) step 7 bash -c "for k in 6 8 9 10 7; do $PY pipeline.py --sigma 2e-7 --k \$k --exhaustive --workers $W || exit 1; done" ;;
+    5) step 5 "$PY" pipeline.py --sigma 2e-7 --k 7 --exhaustive --exact-start --workers "$W" --progress "$PROGRESS" ;;
+    6) step 6 "$PY" pipeline.py --sigma 1e-5 --k 7 --exhaustive --workers "$W" --progress "$PROGRESS" ;;
+    7) step 7 bash -c "for k in 6 8 9 10 7; do $PY pipeline.py --sigma 2e-7 --k \$k --exhaustive --workers $W --progress $PROGRESS || exit 1; done" ;;
     8) step 8 "$PY" plot.py ;;
     9) step 9 "$PY" baselines.py ;;
     *) echo "unknown step $n" ;;
